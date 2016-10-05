@@ -375,9 +375,31 @@ class ApplyShippingStart(ModelView):
     carrier_service = fields.Many2One(
         "carrier.service", "Service", domain=[
             ('id', 'in', Eval('available_carrier_services'))
-        ], depends=['available_carrier_services']
+        ], states={
+            "invisible": Eval("carrier_cost_method").in_(["product", "pricelist"])
+        },
+        depends=['available_carrier_services']
     )
     weight = fields.Float("Weight", required=True)
+    carrier_cost_method = fields.Function(
+        fields.Char('Carrier Cost Method'),
+        "on_change_with_carrier_cost_method"
+    )
+    shipment_cost = fields.Float(
+        "Shipment Cost",
+        states={
+            "invisible": ~Eval("carrier_cost_method").in_(["product", "pricelist"])
+        }, depends=['carrier_cost_method']
+    )
+
+    @staticmethod
+    def default_shipment_cost():
+        return 0.0
+
+    @fields.depends("carrier")
+    def on_change_with_carrier_cost_method(self, name=None):
+        if self.carrier:
+            return self.carrier.carrier_cost_method
 
     @fields.depends("carrier")
     def on_change_with_available_carrier_services(self, name=None):
@@ -451,13 +473,21 @@ class ApplyShipping(Wizard):
         else:
             rates = self.sale.get_shipping_rates(silent=True)
 
+        shipment_cost = 0.0
+        if self.start.shipment_cost and self.start.carrier.carrier_cost_method in \
+                ['product', 'pricelist']:
+            rate = {
+                'display_name': '',
+                'cost_currency':
+            }
+
         sorted_rates = sorted(rates, key=lambda r: Decimal("%s" % r['cost']))
         result = []
         for rate in sorted_rates:
             key = json.dumps({
                 'display_name': rate['display_name'],
                 'cost_currency': rate['cost_currency'].id,
-                'cost': str(rate['cost']),
+                'cost': str(shipment_cost) or str(rate['cost']),
                 'carrier': rate['carrier'].id,
                 'carrier_service': rate['carrier_service'] and
                 rate['carrier_service'].id

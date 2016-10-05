@@ -6,4 +6,6 @@
     <field name="carrier_service" widget="selection"/>
     <label name="weight"/>
     <field name="weight"/>
+    <label name="shipment_cost"/>
+    <field name="shipment_cost"/>
 </form>
